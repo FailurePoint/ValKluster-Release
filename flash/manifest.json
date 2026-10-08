@@ -1,0 +1,8 @@
+{
+  "latest": "v1",
+  "files": {
+    "s3":  { "url": "https://github.com/FailurePoint/ValKluster-Release/releases/download/v1/ValKluster.ino.merged.bin", "offset": 0 },
+    "c5":  { "url": "https://github.com/FailurePoint/ValKluster-Release/releases/download/v1/ValKluster.ino.merged.bin", "offset": 0 },
+    "c6":  { "url": "https://github.com/FailurePoint/ValKluster-Release/releases/download/v1/ValKluster.ino.merged.bin", "offset": 0 }
+  }
+}

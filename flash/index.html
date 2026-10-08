@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ValKluster Web Flasher</title>
+<style>
+body{font-family:system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;color:#e8e8e8;background:#14161a}
+h1{color:#7ec8e3}fieldset{border:1px solid #444;border-radius:8px;margin-bottom:1rem}
+label{display:block;margin:.5rem 0 .15rem}input,select,button{padding:.45rem;border-radius:5px;border:1px solid #666;background:#222;color:#eee}
+button{cursor:pointer;margin:.6rem .4rem .2rem 0}button:disabled{opacity:.4;cursor:not-allowed}
+#log{background:#0b0c0f;border:1px solid #333;border-radius:6px;padding:.7rem;height:180px;overflow-y:auto;font:12px monospace;white-space:pre-wrap}
+.warn{color:#e3a13e}small{color:#9aa}
+</style></head><body>
+<h1>ValKluster Web Flasher</h1>
+<p>Flash ValKluster from your browser (Chrome / Edge / Opera). No install needed — just a USB data cable.</p>
+<fieldset><legend>1. Firmware</legend>
+  <label>Target board</label>
+  <select id="board">
+    <option value="s3">ESP32-S3 (recommended)</option>
+    <option value="c6">ESP32-C6</option>
+    <option value="c5">ESP32-C5</option>
+    <option value="c3">ESP32-C3 (see note below)</option>
+    <option value="exp">Experimental / other (see note below)</option>
+  </select>
+  <label>Version</label><select id="ver"><option>latest</option></select>
+</fieldset>
+<fieldset><legend>2. Pre-configure (optional)</legend>
+  <small>WiGLE basic auth is <b>base64 of email:APIkey</b>. Leave blank to skip — you can edit later on the device (AP mode → web UI → config).</small>
+  <label>Home Wi-Fi SSID</label><input id="homeSsid" maxlength="32">
+  <label>Home Wi-Fi password</label><input id="homePsk" type="password" maxlength="63">
+  <label>WiGLE basic auth</label><input id="wigleBasicToken" maxlength="120" placeholder="base64(email:apikey)">
+  <label>Device name</label><input id="deviceName" maxlength="24" placeholder="rover1">
+</fieldset>
+<fieldset><legend>3. Flash</legend>
+  <button id="connect">Connect &amp; flash</button>
+  <label>Erasure</label>
+  <select id="erase"><option value="none">Keep data</option><option value="all">Erase full flash (recommended for first flash)</option></select>
+  <div id="note"></div>
+</fieldset>
+<div id="log"></div>
+<p class="warn" id="warn"></p>
+<small>Binaries are downloaded from
+<a href="https://github.com/FailurePoint/ValKluster-Release/releases" style="color:#7ec8e3">FailurePoint/ValKluster-Release</a>.
+ESP32-C3 and experimental boards use multi-file images — flash with <code>esptool</code> from the release zip instead.</small>
+<script type="module">
+const $=id=>document.getElementById(id), log=m=>$("log").append(m+"\n"), warn=$("warn");
+let manifest=null;
+async function loadManifest(){ try{ manifest=await (await fetch("manifest.json")).json();
+  const r=await fetch("https://api.github.com/repos/FailurePoint/ValKluster-Release/releases");
+  if(r.ok){ const rels=await r.json(); $("ver").innerHTML="";
+    for(const rel of rels){ const o=document.createElement("option"); o.value=rel.tag_name; o.textContent=rel.tag_name+(rel.tag_name===manifest.latest?" (latest)":""); $("ver").append(o);} }
+}catch(e){ warn.textContent="Could not load release list: "+e.message } }
+loadManifest();
+const note=t=>$("note").innerHTML=t;
+$("board").onchange=()=>note($(["c3","exp"].includes($("board").value)
+ ?"<b>Multi-file build:</b> this board needs esptool with the zip's bootloader/partition/app bins. See the release README."
+ :""));
+function patch(bytes,cfg){
+  const beg=[..."@@VALKCFG_BEG@@"], n=beg.length, MAX=2048;
+  const bin=String.fromCharCode(...beg);
+  let idx=bytes.indexOf(new Uint8Array(beg.map(c=>c.charCodeAt(0))));
+  if(idx<0) throw new Error("Sentinel not found in this image");
+  let json=JSON.stringify(cfg);
+  if(json.length>MAX) throw new Error("Config too large for embedded blob");
+  const payload=new Uint8Array(MAX).fill(0);
+  for(let i=0;i<json.length;i++) payload[i]=json.charCodeAt(i)&0xff;
+  bytes.set(payload,idx+n);
+  log("Patched embedded config ("+json.length+" bytes) at 0x"+idx.toString(16));
+  return bytes;
+}
+function zipConfig(){
+  const cfg={};
+  for(const k of ["homeSsid","homePsk","wigleBasicToken","deviceName"]){
+    const v=$(k).value.trim(); if(v) cfg[k]=v;
+  }
+  return Object.keys(cfg).length?cfg:null;
+}
+$("connect").onclick=async()=>{
+  if(!("serial" in navigator)){ warn.textContent="Web Serial not supported — use Chrome/Edge/Opera over HTTPS."; return; }
+  warn.textContent=""; $("connect").disabled=true;
+  const board=$("board").value, ver=$("ver").value||manifest.latest;
+  try{
+    const f=manifest.files[board]; if(!f) throw new Error("No single-file image for this board");
+    const url=f.url.replace(/\/download\/[^/]+\//, "/download/"+ver+"/");
+    log("Downloading "+url);
+    const res=await fetch(url); if(!res.ok) throw new Error("Download failed: HTTP "+res.status);
+    let bytes=new Uint8Array(await res.arrayBuffer());
+    const cfg=zipConfig(); if(cfg) bytes=patch(bytes,cfg);
+    const port=await navigator.serial.requestPort();
+    await port.open({baudRate:460800});
+    const { Transport, ESPLoader }=await Promise.all([
+      import("https://cdn.jsdelivr.net/npm/@espressif/transport@0.0.8/+esm"),
+      import("https://cdn.jsdelivr.net/npm/esptool-js@0.5.5/+esm")
+    ]).then(m=>({Transport:m[0].Transport,ESPLoader:m[1].ESPLoader}));
+    const transport=new Transport(port);
+    const loader=new ESPLoader({transport,baudrate:460800,chipName:undefined,debug:false});
+    await loader.main();
+    const chip=await loader.chip.constructor.name;
+    log("Connected: "+chip);
+    if($("erase").value==="all") await loader.eraseFlash();
+    const prog=p=>log("\rProgress "+Math.round(p*100)+"%");
+    await loader.flashData(bytes,{file:"valkluster.bin",data:bytes,progressCallback:prog},0);
+    await transport.setDTR(false); await transport.setRTS(false);
+    log("✅ Flash complete! Reboot the device.");
+    await transport.disconnect();
+  }catch(e){ log("❌ "+(e.message||e)); warn.textContent=String(e.message||e); }
+  $("connect").disabled=false;
+};
+</script></body></html>
