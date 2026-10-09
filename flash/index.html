@@ -76,93 +76,72 @@ details{margin:.5rem 0}summary{cursor:pointer;color:#a8c7e8}
 <p><small>Full setup instructions: <a href="https://github.com/FailurePoint/ValKluster">github.com/FailurePoint/ValKluster</a> · source for this flasher: <code>flash/</code> in the ValKluster-Release repo.</small></p>
 
 <script type="module">
-import "https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module";
+import "https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module";
 
 const REPO = "FailurePoint/ValKluster-Release";
 const $ = id => document.getElementById(id);
 const tokenBox = $("token"), relSel = $("release"), status = $("status");
-let releases = [];
+const installBtn = $("install");
+let releases = [], firmwareUrl = "";
 
 for (let i = 1; i <= 10; i++) {
   const d = document.createElement("div");
   d.innerHTML = `<label>SSID #${i}</label><input class="wlInput" id="wl${i}" maxlength="32">`;
   $("wl").appendChild(d);
 }
-// restore token for convenience within the same browser session
 tokenBox.value = sessionStorage.getItem("vkFlashToken") || "";
 tokenBox.addEventListener("input", () => sessionStorage.setItem("vkFlashToken", tokenBox.value.trim()));
 
+function note(msg, cls) { status.innerHTML = msg; status.className = cls || ""; }
+function ready() { return !!(relSel.value && firmwareUrl); }
+function refresh() {
+  installBtn.toggleAttribute("hidden", !ready());
+  if (!relSel.value) note("Load releases, pick one, then Connect.");
+}
+
 function hdrs(binary) {
-  const h = {"Accept": binary ? "application/vnd.github+json" : "application/vnd.github+json"};
+  const h = {"Accept": binary ? "application/octet-stream" : "application/vnd.github+json"};
   const t = tokenBox.value.trim();
   if (t) h["Authorization"] = "Bearer " + t;
   return h;
 }
 
-function note(msg, cls) { status.innerHTML = msg; status.className = cls || ""; }
-
 $("loadBtn").onclick = async () => {
   note("Loading releases…");
   try {
-    const r = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=10`, {headers: hdrs()});
+    const r = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=10`, {headers: hdrs(false)});
     if (r.status === 401) { note("GitHub rejected the token (401). Check it has <b>repo</b> scope and hasn't expired.", "err"); return; }
     if (r.status === 404) { note("Repo not found — token must include <b>repo</b> scope for this private repo.", "err"); return; }
     if (!r.ok) { note("GitHub API error: " + r.status, "err"); return; }
     releases = (await r.json()).filter(x => !x.draft && x.assets.some(a => a.name.endsWith(".merged.bin")));
-    relSel.innerHTML = releases.map(x => `<option value="${x.tag_name}">${x.tag_name}${x.prerelease ? " (pre-release)" : ""} — ${x.published_at?.slice(0,10) || ""}</option>`).join("");
-    note(releases.length ? `Found ${releases.length} release(s).` : "No releases with firmware assets found.", releases.length ? "ok" : "err");
+    relSel.innerHTML = releases.map(x => `<option value="${x.tag_name}">${x.tag_name}${x.prerelease ? " (pre-release)" : ""} — ${x.published_at ? x.published_at.slice(0,10) : ""}</option>`).join("");
+    if (!releases.length) { note("No releases with firmware assets found.", "err"); return; }
+    note(`Found ${releases.length} release(s) — picked latest, downloading…`, "ok");
+    relSel.value = releases[0].tag_name;
+    update();
   } catch (e) { note("Network error: " + e.message, "err"); }
 };
 
-relSel.onchange = update;
-$("board").onchange = update;
-
-function buildConfig() {
-  const c = {};
-  const put = (k, v) => { if (String(v).trim() !== "") c[k] = String(v).trim(); };
-  put("deviceName", $("deviceName").value);
-  put("wigleBasicToken", $("wigleBasicToken").value);
-  put("homeSsid", $("homeSsid").value);
-  put("homePsk", $("homePsk").value);
-  put("wardriverSsid", $("wardriverSsid").value);
-  put("wardriverPsk", $("wardriverPsk").value);
-  put("scanMode", $("scanMode").value);
-  put("speedUnits", $("speedUnits").value);
-  put("gpsBaud", $("gpsBaud").value);
-  put("meshModeOnBoot", $("meshModeOnBoot").value);
-  put("wdgwarsApiKey", $("wdgwarsApiKey").value);
-  put("battPin", $("battPin").value);
-  put("maxBootUploads", $("maxBootUploads").value);
-  put("sdMaxSpiHz", $("sdMaxSpiHz").value);
-  if ($("batteryTest").checked) c.batteryTest = "true";
-  if ($("rotateScreen180").checked) c.rotateScreen180 = "true";
-  if ($("autoStartAfterUpload").checked) c.autoStartAfterUpload = "true";
-  for (let i = 1; i <= 10; i++) put("ssidWhitelist" + i, $("wl" + i).value);
-  return Object.keys(c).length ? JSON.stringify(c) : "";
-}
-
 async function update() {
-  const tag = relSel.value, board = $("board").value;
-  if (!tag) { $("install").manifest = ""; return; }
-  note("Preparing firmware…");
+  if (firmwareUrl) { URL.revokeObjectURL(firmwareUrl); firmwareUrl = ""; }
+  const tag = relSel.value;
+  if (!tag) { refresh(); return; }
+  const rel = releases.find(x => x.tag_name === tag);
+  const asset = rel && rel.assets.find(a => a.name.endsWith(".merged.bin"));
+  if (!asset) { note("No merged.bin asset in that release.", "err"); refresh(); return; }
+  note("Downloading firmware (" + Math.round(asset.size/1024) + " KB)…");
+  installBtn.toggleAttribute("hidden", true);
   try {
-    const rel = releases.find(x => x.tag_name === tag);
-    const asset = rel?.assets.find(a => a.name.endsWith(".merged.bin"));
-    if (!asset) { note("No merged.bin asset in that release.", "err"); return; }
-    let url;
-    const t = tokenBox.value.trim();
-    if (t) {
-      // fetch with token header + octet-stream accept → raw asset
-      const r = await fetch(`https://api.github.com/repos/${REPO}/releases/assets/${asset.id}`, {headers: {Authorization: "Bearer " + t, Accept: "application/octet-stream"}});
-      if (!r.ok) { note("Asset download failed: HTTP " + r.status, "err"); return; }
-      blob = await r.blob();
-      url = URL.createObjectURL(blob);
-    }
-    const manifest = {files: [{path: url, offset: 0}]};
-    const mUrl = URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type: "application/json"}));
-    $("install").manifest = mUrl;
-    note("Ready — press Connect and plug the board in when prompted. If it isn't detected, hold BOOT while it resets.", "ok");
-  } catch (e) { note("Error: " + e.message, "err"); }
+    const r = await fetch(`https://api.github.com/repos/${REPO}/releases/assets/${asset.id}`, {headers: hdrs(true)});
+    if (!r.ok) { note("Asset download failed: HTTP " + r.status, "err"); refresh(); return; }
+    const blob = await r.blob();
+    firmwareUrl = URL.createObjectURL(blob);
+    const manifest = {name: "ValKluster", version: tag, files: [{path: firmwareUrl, offset: 0}]};
+    installBtn.setAttribute("manifest", URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type: "application/json"})));
+    note("Ready — press Connect and pick the serial port when prompted.", "ok");
+    refresh();
+  } catch (e) { note("Download error: " + e.message, "err"); refresh(); }
 }
-</script>
-</body></html>
+relSel.onchange = update;
+refresh();
+</script></body></html>
