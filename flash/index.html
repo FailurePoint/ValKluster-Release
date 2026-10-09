@@ -166,6 +166,25 @@ async function update() {
   if (!asset) { note("No merged.bin asset in that release.", "err"); refresh(); return; }
   note("Downloading firmware (" + Math.round(asset.size/1024) + " KB)…");
   refresh();
+  // Try same-origin copy first (Pages serves it; no CORS involved).
+  const localUrl = new URL("../firmware/" + encodeURIComponent("ValKluster-" + tag + ".merged.bin"), window.location.href).href;
+  log("trying same-origin firmware: " + localUrl);
+  try {
+    const lr = await fetch(localUrl);
+    log("same-origin response: HTTP " + lr.status + " len=" + lr.headers.get("content-length"));
+    if (lr.ok) {
+      const lb = await lr.blob();
+      log("same-origin downloaded: " + lb.size + " bytes, first16=" + Array.from(new Uint8Array(lb.slice(0,16))).map(b => b.toString(16).padStart(2,"0")).join(" "));
+      if (lb.size === asset.size) { finishBlob(lb, tag); return; }
+      log("size mismatch vs asset (" + asset.size + "), falling back to API", "w");
+    } else if (lr.status !== 404) {
+      log("same-origin fetch failed HTTP " + lr.status + ", falling back to API", "w");
+    }
+  } catch (e) { log("same-origin fetch threw: " + e.message + ", falling back to API", "w"); }
+
+  // Fallback: GitHub API asset download (known CORS trap: the redirect to
+  // release-assets.githubusercontent.com sends no Access-Control-Allow-Origin,
+  // so browsers abort the fetch with "Failed to fetch").
   log("GET asset " + asset.name + " id=" + asset.id + " size=" + asset.size);
   try {
     const r = await fetch("https://api.github.com/repos/" + REPO + "/releases/assets/" + asset.id, {headers: hdrs(true)});
@@ -177,20 +196,29 @@ async function update() {
       refresh(); return;
     }
     const blob = await r.blob();
+    finishBlob(blob, tag);
     log("asset downloaded: " + blob.size + " bytes, first16=" + Array.from(new Uint8Array(blob.slice(0,16))).map(b => b.toString(16).padStart(2,"0")).join(" "));
-    firmwareUrl = URL.createObjectURL(blob);
-    const manifest = {
-      name: "ValKluster",
-      version: tag,
-      builds: [{chipFamily: "ESP32-S3", parts: [{path: firmwareUrl, offset: 0}]}],
-      new_install_prompt_erase: false
-    };
-    const mUrl = URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type: "application/json"}));
-    installBtn.setAttribute("manifest", mUrl);
-    log("manifest built: " + JSON.stringify(manifest).slice(0, 300));
-    note("Ready — press Connect and pick the serial port when prompted.", "ok");
+  } catch (e) {
+    note("Asset download failed: " + e.message + " — GitHub's asset CDN does not send CORS headers; wait for the firmware mirror on the Pages site, or flash with esptool.", "err");
+    log("asset fetch threw (likely CORS on release-assets.githubusercontent.com redirect)", "e", e.stack);
     refresh();
-  } catch (e) { note("Download error: " + e.message, "err"); log("asset fetch threw", "e", e.stack); refresh(); }
+  }
+}
+
+function finishBlob(blob, tag) {
+  if (firmwareUrl) URL.revokeObjectURL(firmwareUrl);
+  firmwareUrl = URL.createObjectURL(blob);
+  const manifest = {
+    name: "ValKluster",
+    version: tag,
+    builds: [{chipFamily: "ESP32-S3", parts: [{path: firmwareUrl, offset: 0}]}],
+    new_install_prompt_erase: false
+  };
+  const mUrl = URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type: "application/json"}));
+  installBtn.setAttribute("manifest", mUrl);
+  log("manifest built: " + JSON.stringify(manifest).slice(0, 300));
+  note("Ready — press Connect and pick the serial port when prompted.", "ok");
+  refresh();
 }
 relSel.onchange = update;
 
