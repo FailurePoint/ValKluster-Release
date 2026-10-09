@@ -148,4 +148,13 @@ async function update() {
 }
 relSel.onchange = update;
 refresh();
+
+installBtn.addEventListener("state-changed", e => {
+  const st = e.detail;
+  console.log("EWT state:", st);
+  if (st.state === "error") note("<b>EWT error:</b> " + (st.message || "") + (st.details ? "<br><code>" + JSON.stringify(st.details).slice(0,300) + "</code>" : ""), "err");
+  else if (st.state === "finished") note("Flash complete! Rebooting device…", "ok");
+  else if (st.state) note("Flashing: " + st.state, "ok");
+  else if (st.message) note(st.message, "");
+});
 </script></body></html>
