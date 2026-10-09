@@ -3,106 +3,166 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ValKluster Web Flasher</title>
 <style>
-body{font-family:system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem;color:#e8e8e8;background:#14161a}
-h1{color:#7ec8e3}fieldset{border:1px solid #444;border-radius:8px;margin-bottom:1rem}
-label{display:block;margin:.5rem 0 .15rem}input,select,button{padding:.45rem;border-radius:5px;border:1px solid #666;background:#222;color:#eee}
-button{cursor:pointer;margin:.6rem .4rem .2rem 0}button:disabled{opacity:.4;cursor:not-allowed}
-#log{background:#0b0c0f;border:1px solid #333;border-radius:6px;padding:.7rem;height:180px;overflow-y:auto;font:12px monospace;white-space:pre-wrap}
-.warn{color:#e3a13e}small{color:#9aa}
+body{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;padding:0 1rem;color:#e8e8e8;background:#14161a}
+h1{color:#7ec8ff;margin:0 0 .3rem} h2{color:#a8c7e8;font-size:1.05rem;margin:1.4rem 0 .5rem}
+a{color:#7ec8ff} small{color:#9aa4b0}
+fieldset{border:1px solid #333a44;border-radius:8px;margin:1rem 0;padding:.8rem 1rem}
+label{display:block;margin:.55rem 0 .15rem;font-size:.9rem}
+input,select{background:#0d0f13;color:#e8e8e8;border:1px solid #3a414b;border-radius:5px;padding:.35rem .5rem;width:100%;box-sizing:border-box}
+input[type=checkbox]{width:auto;margin-right:.45rem}
+.row{display:flex;gap:1rem;flex-wrap:wrap}.row>div{flex:1;min-width:200px}
+.wl{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.4rem}
+button{background:#2b6cb0;color:#fff;border:0;border-radius:6px;padding:.5rem .9rem;cursor:pointer}
+button:disabled{opacity:.5}
+#token{background:#1a1d23}
+.warn{color:#f6ad55;font-size:.8rem;margin:.3rem 0}
+.ok{color:#68d391}.err{color:#fc8181}
+#status{margin:.6rem 0;font-size:.9rem;min-height:1.2em}
+esp-web-install-button{display:block;margin:1.2rem 0}
+code{background:#0d0f13;padding:.1rem .35rem;border-radius:4px}
+details{margin:.5rem 0}summary{cursor:pointer;color:#a8c7e8}
 </style></head><body>
 <h1>ValKluster Web Flasher</h1>
-<p>Flash ValKluster from your browser (Chrome / Edge / Opera). No install needed — just a USB data cable.</p>
-<fieldset><legend>1. Firmware</legend>
-  <label>Target board</label>
-  <select id="board">
-    <option value="s3">ESP32-S3 (recommended)</option>
-    <option value="c6">ESP32-C6</option>
-    <option value="c5">ESP32-C5</option>
-    <option value="c3">ESP32-C3 (see note below)</option>
-    <option value="exp">Experimental / other (see note below)</option>
-  </select>
-  <label>Version</label><select id="ver"><option>latest</option></select>
+<p>Flash the ValKluster firmware over USB-serial from your browser — Chrome or Edge on desktop required.</p>
+
+<details open><summary><b>1. Access (GitHub token)</b></summary>
+<p><small>The release repo is private, so downloads need a GitHub personal access token with <code>repo</code> scope. Generate one at <a href="https://github.com/settings/tokens">github.com/settings/tokens</a>. The token is kept only in this browser tab (session storage) and sent only to <code>api.github.com</code>.</small></p>
+<div class="row"><div><label>GitHub token <small>(paste, don't store)</small></label>
+<input id="token" type="password" placeholder="ghp_…" autocomplete="off"></div>
+<div><label>&nbsp;</label><button id="loadBtn">Load releases</button></div></div>
+<div id="authStatus"></div>
+<p class="warn">Anyone with the page open can read your token — only use it on a device you control, and revoke it when you're done.</p>
+</details>
+
+<fieldset><legend>2. Release & board</legend>
+<label>Release</label><select id="release"><option value="">— load releases first —</option></select>
+<label>Board</label><select id="board">
+<option value="s3">XIAO ESP32-S3 (main)</option>
+<option value="c5">TDongleC5 (ESP32-C5)</option>
+<option value="c6">Waveshare Display Mini (ESP32-C6)</option></select>
 </fieldset>
-<fieldset><legend>2. Pre-configure (optional)</legend>
-  <small>WiGLE basic auth is <b>base64 of email:APIkey</b>. Leave blank to skip — you can edit later on the device (AP mode → web UI → config).</small>
-  <label>Home Wi-Fi SSID</label><input id="homeSsid" maxlength="32">
-  <label>Home Wi-Fi password</label><input id="homePsk" type="password" maxlength="63">
-  <label>WiGLE basic auth</label><input id="wigleBasicToken" maxlength="120" placeholder="base64(email:apikey)">
-  <label>Device name</label><input id="deviceName" maxlength="24" placeholder="rover1">
+
+<fieldset><legend>3. Pre-configure (optional)</legend>
+<small>Values are baked into the flashed firmware as defaults. Blank fields keep firmware defaults. You can edit everything later on the device: AP mode → web UI → config.</small>
+<div class="row">
+<div><label>Device name</label><input id="deviceName" placeholder="ValKluster-Wardriver" maxlength="31"></div>
+<div><label>WiGLE basic auth <small>(base64 of email:APIkey)</small></label><input id="wigleBasicToken" placeholder="Leave blank to skip"></div></div>
+<div class="row">
+<div><label>Home Wi-Fi SSID</label><input id="homeSsid"></div>
+<div><label>Home Wi-Fi password</label><input id="homePsk" type="password"></div></div>
+<div class="row">
+<div><label>Wardrive AP SSID</label><input id="wardriverSsid" placeholder="ValKluster-WARDRIVE"></div>
+<div><label>Wardrive AP password</label><input id="wardriverPsk" type="password" placeholder="wardrive1234"></div></div>
+<div class="row">
+<div><label>Scan mode</label><select id="scanMode"><option value="">Default (aggressive)</option><option value="aggressive">aggressive</option><option value="powersaving">powersaving</option></select></div>
+<div><label>Speed units</label><select id="speedUnits"><option value="">Default (km/h)</option><option value="kmh">km/h</option><option value="mph">mph</option></select></div>
+<div><label>GPS baud</label><select id="gpsBaud"><option value="">Default (9600)</option><option>9600</option><option>4800</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select></div></div>
+<div class="row">
+<div><label>Mesh mode on boot</label><select id="meshModeOnBoot"><option value="">Default (none)</option><option value="none">none</option><option value="core">core</option><option value="node">node</option></select></div>
+<div><label>WiGLE Wars API key</label><input id="wdgwarsApiKey" placeholder="Leave blank to skip"></div></div>
+<div class="row">
+<div><label>Battery ADC pin (GPIO) <small>0 = GPIO 0, blank = disabled</small></label><input id="battPin" type="number" min="0" max="48"></div>
+<div><label>Max boot uploads <small>-1 = unlimited, 0 = off</small></label><input id="maxBootUploads" type="number" min="-1"></div>
+<div><label>SD max SPI clock (Hz) <small>400000 – 40000000</small></label><input id="sdMaxSpiHz" type="number" min="400000" max="40000000" step="100000"></div></div>
+<label><input type="checkbox" id="batteryTest"> Run battery test on boot</label>
+<label><input type="checkbox" id="rotateScreen180"> Rotate screen 180°</label>
+<label><input type="checkbox" id="autoStartAfterUpload"> Auto-start scanning after OTA upload</label>
+<details><summary>SSID whitelist (up to 10 — scanned but never logged to CSV)</summary>
+<div class="wl" id="wl"></div></details>
 </fieldset>
-<fieldset><legend>3. Flash</legend>
-  <button id="connect">Connect &amp; flash</button>
-  <label>Erasure</label>
-  <select id="erase"><option value="none">Keep data</option><option value="all">Erase full flash (recommended for first flash)</option></select>
-  <div id="note"></div>
-</fieldset>
-<div id="log"></div>
-<p class="warn" id="warn"></p>
-<small>Binaries are downloaded from
-<a href="https://github.com/FailurePoint/ValKluster-Release/releases" style="color:#7ec8e3">FailurePoint/ValKluster-Release</a>.
-ESP32-C3 and experimental boards use multi-file images — flash with <code>esptool</code> from the release zip instead.</small>
+
+<esp-web-install-button id="install" manifest="" use-serial></esp-web-install-button>
+<div id="status"></div>
+<p><small>Full setup instructions: <a href="https://github.com/FailurePoint/ValKluster">github.com/FailurePoint/ValKluster</a> · source for this flasher: <code>flash/</code> in the ValKluster-Release repo.</small></p>
+
 <script type="module">
-const $=id=>document.getElementById(id), log=m=>$("log").append(m+"\n"), warn=$("warn");
-let manifest=null;
-async function loadManifest(){ try{ manifest=await (await fetch("manifest.json")).json();
-  const r=await fetch("https://api.github.com/repos/FailurePoint/ValKluster-Release/releases");
-  if(r.ok){ const rels=await r.json(); $("ver").innerHTML="";
-    for(const rel of rels){ const o=document.createElement("option"); o.value=rel.tag_name; o.textContent=rel.tag_name+(rel.tag_name===manifest.latest?" (latest)":""); $("ver").append(o);} }
-}catch(e){ warn.textContent="Could not load release list: "+e.message } }
-loadManifest();
-const note=t=>$("note").innerHTML=t;
-$("board").onchange=()=>note($(["c3","exp"].includes($("board").value)
- ?"<b>Multi-file build:</b> this board needs esptool with the zip's bootloader/partition/app bins. See the release README."
- :""));
-function patch(bytes,cfg){
-  const beg=[..."@@VALKCFG_BEG@@"], n=beg.length, MAX=2048;
-  const bin=String.fromCharCode(...beg);
-  let idx=bytes.indexOf(new Uint8Array(beg.map(c=>c.charCodeAt(0))));
-  if(idx<0) throw new Error("Sentinel not found in this image");
-  let json=JSON.stringify(cfg);
-  if(json.length>MAX) throw new Error("Config too large for embedded blob");
-  const payload=new Uint8Array(MAX).fill(0);
-  for(let i=0;i<json.length;i++) payload[i]=json.charCodeAt(i)&0xff;
-  bytes.set(payload,idx+n);
-  log("Patched embedded config ("+json.length+" bytes) at 0x"+idx.toString(16));
-  return bytes;
+import "https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module";
+
+const REPO = "FailurePoint/ValKluster-Release";
+const $ = id => document.getElementById(id);
+const tokenBox = $("token"), relSel = $("release"), status = $("status");
+let releases = [];
+
+for (let i = 1; i <= 10; i++) {
+  const d = document.createElement("div");
+  d.innerHTML = `<label>SSID #${i}</label><input class="wlInput" id="wl${i}" maxlength="32">`;
+  $("wl").appendChild(d);
 }
-function zipConfig(){
-  const cfg={};
-  for(const k of ["homeSsid","homePsk","wigleBasicToken","deviceName"]){
-    const v=$(k).value.trim(); if(v) cfg[k]=v;
-  }
-  return Object.keys(cfg).length?cfg:null;
+// restore token for convenience within the same browser session
+tokenBox.value = sessionStorage.getItem("vkFlashToken") || "";
+tokenBox.addEventListener("input", () => sessionStorage.setItem("vkFlashToken", tokenBox.value.trim()));
+
+function hdrs(binary) {
+  const h = {"Accept": binary ? "application/vnd.github+json" : "application/vnd.github+json"};
+  const t = tokenBox.value.trim();
+  if (t) h["Authorization"] = "Bearer " + t;
+  return h;
 }
-$("connect").onclick=async()=>{
-  if(!("serial" in navigator)){ warn.textContent="Web Serial not supported — use Chrome/Edge/Opera over HTTPS."; return; }
-  warn.textContent=""; $("connect").disabled=true;
-  const board=$("board").value, ver=$("ver").value||manifest.latest;
-  try{
-    const f=manifest.files[board]; if(!f) throw new Error("No single-file image for this board");
-    const url=f.url.replace(/\/download\/[^/]+\//, "/download/"+ver+"/");
-    log("Downloading "+url);
-    const res=await fetch(url); if(!res.ok) throw new Error("Download failed: HTTP "+res.status);
-    let bytes=new Uint8Array(await res.arrayBuffer());
-    const cfg=zipConfig(); if(cfg) bytes=patch(bytes,cfg);
-    const port=await navigator.serial.requestPort();
-    await port.open({baudRate:460800});
-    const { Transport, ESPLoader }=await Promise.all([
-      import("https://cdn.jsdelivr.net/npm/@espressif/transport@0.0.8/+esm"),
-      import("https://cdn.jsdelivr.net/npm/esptool-js@0.5.5/+esm")
-    ]).then(m=>({Transport:m[0].Transport,ESPLoader:m[1].ESPLoader}));
-    const transport=new Transport(port);
-    const loader=new ESPLoader({transport,baudrate:460800,chipName:undefined,debug:false});
-    await loader.main();
-    const chip=await loader.chip.constructor.name;
-    log("Connected: "+chip);
-    if($("erase").value==="all") await loader.eraseFlash();
-    const prog=p=>log("\rProgress "+Math.round(p*100)+"%");
-    await loader.flashData(bytes,{file:"valkluster.bin",data:bytes,progressCallback:prog},0);
-    await transport.setDTR(false); await transport.setRTS(false);
-    log("✅ Flash complete! Reboot the device.");
-    await transport.disconnect();
-  }catch(e){ log("❌ "+(e.message||e)); warn.textContent=String(e.message||e); }
-  $("connect").disabled=false;
+
+function note(msg, cls) { status.innerHTML = msg; status.className = cls || ""; }
+
+$("loadBtn").onclick = async () => {
+  note("Loading releases…");
+  try {
+    const r = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=10`, {headers: hdrs()});
+    if (r.status === 401) { note("GitHub rejected the token (401). Check it has <b>repo</b> scope and hasn't expired.", "err"); return; }
+    if (r.status === 404) { note("Repo not found — token must include <b>repo</b> scope for this private repo.", "err"); return; }
+    if (!r.ok) { note("GitHub API error: " + r.status, "err"); return; }
+    releases = (await r.json()).filter(x => !x.draft && x.assets.some(a => a.name.endsWith(".merged.bin")));
+    relSel.innerHTML = releases.map(x => `<option value="${x.tag_name}">${x.tag_name}${x.prerelease ? " (pre-release)" : ""} — ${x.published_at?.slice(0,10) || ""}</option>`).join("");
+    note(releases.length ? `Found ${releases.length} release(s).` : "No releases with firmware assets found.", releases.length ? "ok" : "err");
+  } catch (e) { note("Network error: " + e.message, "err"); }
 };
-</script></body></html>
+
+relSel.onchange = update;
+$("board").onchange = update;
+
+function buildConfig() {
+  const c = {};
+  const put = (k, v) => { if (String(v).trim() !== "") c[k] = String(v).trim(); };
+  put("deviceName", $("deviceName").value);
+  put("wigleBasicToken", $("wigleBasicToken").value);
+  put("homeSsid", $("homeSsid").value);
+  put("homePsk", $("homePsk").value);
+  put("wardriverSsid", $("wardriverSsid").value);
+  put("wardriverPsk", $("wardriverPsk").value);
+  put("scanMode", $("scanMode").value);
+  put("speedUnits", $("speedUnits").value);
+  put("gpsBaud", $("gpsBaud").value);
+  put("meshModeOnBoot", $("meshModeOnBoot").value);
+  put("wdgwarsApiKey", $("wdgwarsApiKey").value);
+  put("battPin", $("battPin").value);
+  put("maxBootUploads", $("maxBootUploads").value);
+  put("sdMaxSpiHz", $("sdMaxSpiHz").value);
+  if ($("batteryTest").checked) c.batteryTest = "true";
+  if ($("rotateScreen180").checked) c.rotateScreen180 = "true";
+  if ($("autoStartAfterUpload").checked) c.autoStartAfterUpload = "true";
+  for (let i = 1; i <= 10; i++) put("ssidWhitelist" + i, $("wl" + i).value);
+  return Object.keys(c).length ? JSON.stringify(c) : "";
+}
+
+async function update() {
+  const tag = relSel.value, board = $("board").value;
+  if (!tag) { $("install").manifest = ""; return; }
+  note("Preparing firmware…");
+  try {
+    const rel = releases.find(x => x.tag_name === tag);
+    const asset = rel?.assets.find(a => a.name.endsWith(".merged.bin"));
+    if (!asset) { note("No merged.bin asset in that release.", "err"); return; }
+    let url;
+    const t = tokenBox.value.trim();
+    if (t) {
+      // fetch with token header + octet-stream accept → raw asset
+      const r = await fetch(`https://api.github.com/repos/${REPO}/releases/assets/${asset.id}`, {headers: {Authorization: "Bearer " + t, Accept: "application/octet-stream"}});
+      if (!r.ok) { note("Asset download failed: HTTP " + r.status, "err"); return; }
+      blob = await r.blob();
+      url = URL.createObjectURL(blob);
+    }
+    const manifest = {files: [{path: url, offset: 0}]};
+    const mUrl = URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type: "application/json"}));
+    $("install").manifest = mUrl;
+    note("Ready — press Connect and plug the board in when prompted. If it isn't detected, hold BOOT while it resets.", "ok");
+  } catch (e) { note("Error: " + e.message, "err"); }
+}
+</script>
+</body></html>
