@@ -212,7 +212,8 @@ function finishBlob(blob, tag) {
     name: "ValKluster",
     version: tag,
     builds: [{chipFamily: "ESP32-S3", parts: [{path: firmwareUrl, offset: 0}]}],
-    new_install_prompt_erase: false
+    new_install_prompt_erase: false,
+    disable_improv: true
   };
   const mUrl = URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type: "application/json"}));
   installBtn.setAttribute("manifest", mUrl);
