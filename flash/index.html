@@ -21,6 +21,8 @@ button:disabled{opacity:.5}
 esp-web-install-button{display:block;margin:1.2rem 0}
 code{background:#0d0f13;padding:.1rem .35rem;border-radius:4px}
 details{margin:.5rem 0}summary{cursor:pointer;color:#a8c7e8}
+#dbglog{background:#06070a;border:1px solid #333a44;border-radius:6px;font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;max-height:340px;overflow:auto;padding:.6rem;white-space:pre-wrap;word-break:break-all;color:#c9d1d9}
+#dbglog .t{color:#7ec8ff}#dbglog .e{color:#fc8181}#dbglog .w{color:#f6ad55}#dbglog .o{color:#68d391}
 </style></head><body>
 <h1>ValKluster Web Flasher</h1>
 <p>Flash the ValKluster firmware over USB-serial from your browser — Chrome or Edge on desktop required.</p>
@@ -72,6 +74,11 @@ details{margin:.5rem 0}summary{cursor:pointer;color:#a8c7e8}
 
 <esp-web-install-button id="install" manifest="" use-serial></esp-web-install-button>
 <div id="status"></div>
+<details open><summary><b>Debug log</b> <small>(everything the flasher does, in real time)</small></summary>
+<div id="dbglog"></div>
+<p><small><button id="dbgCopy" type="button">Copy log</button> <button id="dbgClear" type="button">Clear</button> — paste the log here when something fails.</small></p>
+</details>
+
 <p><small>Full setup instructions: <a href="https://github.com/FailurePoint/ValKluster">github.com/FailurePoint/ValKluster</a> · source for this flasher: <code>flash/</code> in the ValKluster-Release repo.</small></p>
 
 <script type="module">
@@ -83,15 +90,13 @@ const tokenBox = $("token"), relSel = $("release"), status = $("status");
 const installBtn = $("install"), dbg = $("dbglog");
 let releases = [], firmwareUrl = "";
 
-/* ---------- debug log ---------- */
 const lines = [];
 function ts() { return new Date().toISOString().slice(11, 23); }
 function log(msg, cls, obj) {
-  const t = ts();
-  let text = `[${t}] ${msg}`;
+  let text = "[" + ts() + "] " + msg;
   if (obj !== undefined) {
     try { text += "\n  " + JSON.stringify(obj, null, 2); }
-    catch (e) { try { text += "\n  " + String(obj); } catch (_) {} }
+    catch (e) { text += "\n  " + String(obj); }
   }
   lines.push(text);
   const span = document.createElement("span");
@@ -105,33 +110,27 @@ window.onerror = (m, src, l, c, err) => {
   return false;
 };
 window.addEventListener("unhandledrejection", e => log("unhandled promise rejection", "e", e.reason && (e.reason.stack || e.reason.message || String(e.reason))));
-const origConsole = { log: console.log.bind(console), warn: console.warn.bind(console), error: console.error.bind(console) };
-console.log = (...a) => { origConsole.log(...a); log("console.log: " + a.map(x => (typeof x === "object" ? JSON.stringify(x) : String(x))).join(" ")); };
-console.warn = (...a) => { origConsole.warn(...a); log("console.warn: " + a.map(String).join(" "), "w"); };
-console.error = (...a) => { origConsole.error(...a); log("console.error: " + a.map(x => (typeof x === "object" ? JSON.stringify(x) : String(x))).join(" "), "e"); };
+const origC = { log: console.log.bind(console), warn: console.warn.bind(console), error: console.error.bind(console) };
+console.log = (...a) => { origC.log(...a); log("console.log: " + a.map(x => (typeof x === "object" ? JSON.stringify(x) : String(x))).join(" ")); };
+console.warn = (...a) => { origC.warn(...a); log("console.warn: " + a.map(String).join(" "), "w"); };
+console.error = (...a) => { origC.error(...a); log("console.error: " + a.map(String).join(" "), "e"); };
 log("Flasher loaded; user agent: " + navigator.userAgent);
 if (!navigator.serial) log("navigator.serial MISSING — this browser cannot flash. Use Chrome/Edge on desktop.", "e");
 else log("Web Serial available.", "o");
 
-$("dbgCopy").onclick = () => { navigator.clipboard.writeText(lines.join("\n")); status.textContent = "Log copied."; };
+$("dbgCopy").onclick = () => { navigator.clipboard.writeText(lines.join("\n")); note("Log copied."); };
 $("dbgClear").onclick = () => { dbg.textContent = ""; lines.length = 0; };
 
-/* ---------- UI helpers ---------- */
 for (let i = 1; i <= 10; i++) {
   const d = document.createElement("div");
-  d.innerHTML = `<label>SSID #${i}</label><input class="wlInput" id="wl${i}" maxlength="32">`;
+  d.innerHTML = '<label>SSID #' + i + '</label><input class="wlInput" id="wl' + i + '" maxlength="32">';
   $("wl").appendChild(d);
 }
 tokenBox.value = sessionStorage.getItem("vkFlashToken") || "";
 tokenBox.addEventListener("input", () => sessionStorage.setItem("vkFlashToken", tokenBox.value.trim()));
 
 function note(msg, cls) { status.innerHTML = msg; status.className = cls || ""; log("status: " + msg.replace(/<[^>]+>/g, " ")); }
-function ready() { return !!(relSel.value && firmwareUrl); }
-function refresh() {
-  installBtn.toggleAttribute("hidden", !ready());
-  if (!relSel.value) note("Load releases, pick one, then Connect.");
-}
-
+function refresh() { installBtn.toggleAttribute("hidden", !relSel.value || !firmwareUrl); }
 function hdrs(binary) {
   const h = {"Accept": binary ? "application/octet-stream" : "application/vnd.github+json"};
   const t = tokenBox.value.trim();
@@ -143,7 +142,7 @@ $("loadBtn").onclick = async () => {
   note("Loading releases…");
   log("GET releases for " + REPO);
   try {
-    const r = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=10`, {headers: hdrs(false)});
+    const r = await fetch("https://api.github.com/repos/" + REPO + "/releases?per_page=10", {headers: hdrs(false)});
     log("releases response: HTTP " + r.status);
     if (r.status === 401) { note("GitHub rejected the token (401). Check it has <b>repo</b> scope and hasn't expired.", "err"); return; }
     if (r.status === 404) { note("Repo not found — token must include <b>repo</b> scope for this private repo.", "err"); return; }
@@ -151,9 +150,9 @@ $("loadBtn").onclick = async () => {
     releases = (await r.json()).filter(x => !x.draft && x.assets.some(a => a.name.endsWith(".merged.bin")));
     log("releases with merged.bin: " + releases.map(x => x.tag_name).join(", "));
     if (!releases.length) { note("No releases with firmware assets found.", "err"); return; }
-    relSel.innerHTML = releases.map(x => `<option value="${x.tag_name}">${x.tag_name}${x.prerelease ? " (pre-release)" : ""} — ${x.published_at ? x.published_at.slice(0,10) : ""}</option>`).join("");
-    note(`Found ${releases.length} release(s) — picked latest, downloading…`, "ok");
+    relSel.innerHTML = releases.map(x => '<option value="' + x.tag_name + '">' + x.tag_name + (x.prerelease ? " (pre-release)" : "") + "</option>").join("");
     relSel.value = releases[0].tag_name;
+    note("Found " + releases.length + " release(s) — downloading firmware…", "ok");
     update();
   } catch (e) { note("Network error: " + e.message, "err"); log("releases fetch threw", "e", e.stack); }
 };
@@ -166,10 +165,10 @@ async function update() {
   const asset = rel && rel.assets.find(a => a.name.endsWith(".merged.bin"));
   if (!asset) { note("No merged.bin asset in that release.", "err"); refresh(); return; }
   note("Downloading firmware (" + Math.round(asset.size/1024) + " KB)…");
-  installBtn.toggleAttribute("hidden", true);
+  refresh();
   log("GET asset " + asset.name + " id=" + asset.id + " size=" + asset.size);
   try {
-    const r = await fetch(`https://api.github.com/repos/${REPO}/releases/assets/${asset.id}`, {headers: hdrs(true)});
+    const r = await fetch("https://api.github.com/repos/" + REPO + "/releases/assets/" + asset.id, {headers: hdrs(true)});
     log("asset response: HTTP " + r.status + " type=" + r.headers.get("content-type") + " len=" + r.headers.get("content-length"));
     if (!r.ok) {
       const body = await r.text().catch(() => "");
@@ -194,16 +193,15 @@ async function update() {
   } catch (e) { note("Download error: " + e.message, "err"); log("asset fetch threw", "e", e.stack); refresh(); }
 }
 relSel.onchange = update;
-refresh();
 
-/* ---------- EWT event surfacing ---------- */
 installBtn.addEventListener("state-changed", e => {
   const st = e.detail;
-  const cls = st.state === "error" ? "e" : st.state === "finished" ? "o" : "o";
+  const cls = st.state === "error" ? "e" : "o";
   log("EWT event: state=" + st.state, cls, st.details !== undefined ? {message: st.message, details: st.details} : st);
   if (st.state === "error") note("<b>EWT error:</b> " + (st.message || "") + (st.details ? "<br><code>" + JSON.stringify(st.details).slice(0,400) + "</code>" : ""), "err");
   else if (st.state === "finished") note("Flash complete! Rebooting device…", "ok");
   else if (st.state) note("Flashing: " + st.state + (st.message ? " — " + st.message : ""), "ok");
 });
 installBtn.addEventListener("load", e => log("EWT manifest load event", "o", e.detail));
+refresh();
 </script></body></html>
