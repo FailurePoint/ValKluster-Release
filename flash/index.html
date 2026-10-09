@@ -37,9 +37,8 @@ details{margin:.5rem 0}summary{cursor:pointer;color:#a8c7e8}
 <fieldset><legend>2. Release & board</legend>
 <label>Release</label><select id="release"><option value="">— load releases first —</option></select>
 <label>Board</label><select id="board">
-<option value="s3">XIAO ESP32-S3 (main)</option>
-<option value="c5">TDongleC5 (ESP32-C5)</option>
-<option value="c6">Waveshare Display Mini (ESP32-C6)</option></select>
+<option value="s3">XIAO ESP32-S3 (main)</option></select>
+<small>C5/C6 builds aren't published yet — coming with the next release.</small>
 </fieldset>
 
 <fieldset><legend>3. Pre-configure (optional)</legend>
@@ -136,7 +135,12 @@ async function update() {
     if (!r.ok) { note("Asset download failed: HTTP " + r.status, "err"); refresh(); return; }
     const blob = await r.blob();
     firmwareUrl = URL.createObjectURL(blob);
-    const manifest = {name: "ValKluster", version: tag, files: [{path: firmwareUrl, offset: 0}]};
+    const manifest = {
+      name: "ValKluster",
+      version: tag,
+      builds: [{chipFamily: "ESP32-S3", parts: [{path: firmwareUrl, offset: 0}]}],
+      new_install_prompt_erase: false
+    };
     installBtn.setAttribute("manifest", URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type: "application/json"})));
     note("Ready — press Connect and pick the serial port when prompted.", "ok");
     refresh();
