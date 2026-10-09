@@ -211,7 +211,7 @@ function finishBlob(blob, tag) {
   const manifest = {
     name: "ValKluster",
     version: tag,
-    builds: [{chipFamily: "ESP32-S3", parts: [{path: firmwareUrl, offset: 0}]}],
+    builds: [{chipFamily: "ESP32-S3", improv: false, parts: [{path: firmwareUrl, offset: 0}]}],
     new_install_prompt_erase: false,
     disable_improv: true
   };
