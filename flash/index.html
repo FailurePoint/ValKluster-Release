@@ -47,27 +47,18 @@ details{margin:.5rem 0}summary{cursor:pointer;color:#a8c7e8}
 <small>Values are baked into the flashed firmware as defaults. Blank fields keep firmware defaults. You can edit everything later on the device: AP mode → web UI → config.</small>
 <div class="row">
 <div><label>Device name</label><input id="deviceName" placeholder="ValKluster-Wardriver" maxlength="31"></div>
-<div><label>WiGLE basic auth <small>(base64 of email:APIkey)</small></label><input id="wigleBasicToken" placeholder="Leave blank to skip"></div></div>
-<div class="row">
-<div><label>Home Wi-Fi SSID</label><input id="homeSsid"></div>
-<div><label>Home Wi-Fi password</label><input id="homePsk" type="password"></div></div>
-<div class="row">
 <div><label>Wardrive AP SSID</label><input id="wardriverSsid" placeholder="ValKluster-WARDRIVE"></div>
 <div><label>Wardrive AP password</label><input id="wardriverPsk" type="password" placeholder="wardrive1234"></div></div>
 <div class="row">
 <div><label>Scan mode</label><select id="scanMode"><option value="">Default (aggressive)</option><option value="aggressive">aggressive</option><option value="powersaving">powersaving</option></select></div>
 <div><label>Speed units</label><select id="speedUnits"><option value="">Default (km/h)</option><option value="kmh">km/h</option><option value="mph">mph</option></select></div>
-<div><label>GPS baud</label><select id="gpsBaud"><option value="">Default (9600)</option><option>9600</option><option>4800</option><option>19200</option><option>38400</option><option>57600</option><option>115200</option></select></div></div>
 <div class="row">
 <div><label>Mesh mode on boot</label><select id="meshModeOnBoot"><option value="">Default (none)</option><option value="none">none</option><option value="core">core</option><option value="node">node</option></select></div>
 <div><label>WiGLE Wars API key</label><input id="wdgwarsApiKey" placeholder="Leave blank to skip"></div></div>
 <div class="row">
 <div><label>Battery ADC pin (GPIO) <small>0 = GPIO 0, blank = disabled</small></label><input id="battPin" type="number" min="0" max="48"></div>
-<div><label>Max boot uploads <small>-1 = unlimited, 0 = off</small></label><input id="maxBootUploads" type="number" min="-1"></div>
 <div><label>SD max SPI clock (Hz) <small>400000 – 40000000</small></label><input id="sdMaxSpiHz" type="number" min="400000" max="40000000" step="100000"></div></div>
 <label><input type="checkbox" id="batteryTest"> Run battery test on boot</label>
-<label><input type="checkbox" id="rotateScreen180"> Rotate screen 180°</label>
-<label><input type="checkbox" id="autoStartAfterUpload"> Auto-start scanning after OTA upload</label>
 <details><summary>SSID whitelist (up to 10 — scanned but never logged to CSV)</summary>
 <div class="wl" id="wl"></div></details>
 </fieldset>
@@ -211,7 +202,7 @@ function finishBlob(blob, tag) {
   const manifest = {
     name: "ValKluster",
     version: tag,
-    builds: [{chipFamily: "ESP32-S3", improv: false, parts: [{path: firmwareUrl, offset: 0}]}],
+    builds: [{chipFamily: "ESP32-S3", parts: [{path: firmwareUrl, offset: 0}]}],
     new_install_prompt_erase: false,
     disable_improv: true
   };
