@@ -1,8 +1,8 @@
 {
-  "latest": "v0.2.3",
+  "latest": "v0.2.4",
   "files": {
-    "s3":  { "url": "https://github.com/FailurePoint/ValKluster-Release/releases/download/v0.2.3/ValKluster.ino.merged.bin", "offset": 0 },
-    "c5":  { "url": "https://github.com/FailurePoint/ValKluster-Release/releases/download/v0.2.3/ValKluster.ino.merged.bin", "offset": 0 },
-    "c6":  { "url": "https://github.com/FailurePoint/ValKluster-Release/releases/download/v0.2.3/ValKluster.ino.merged.bin", "offset": 0 }
+    "s3":  { "url": "https://github.com/FailurePoint/ValKluster-Release/releases/download/v0.2.4/ValKluster.ino.merged.bin", "offset": 0 },
+    "c5":  { "url": "https://github.com/FailurePoint/ValKluster-Release/releases/download/v0.2.4/ValKluster.ino.merged.bin", "offset": 0 },
+    "c6":  { "url": "https://github.com/FailurePoint/ValKluster-Release/releases/download/v0.2.4/ValKluster.ino.merged.bin", "offset": 0 }
   }
 }
